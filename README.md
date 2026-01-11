@@ -68,7 +68,7 @@ A real-time transaction reconciliation system that matches transactions between 
    ```
 
 5. **Access the dashboard**
-   - Frontend: http://localhost:5173
+   - Frontend: http://localhost:3000/
    - API: http://localhost:3001/api
    - WebSocket: ws://localhost:8080
 
@@ -78,6 +78,7 @@ A real-time transaction reconciliation system that matches transactions between 
 - Redis: `localhost:6379` (Docker) or `redis:6379` (internal)
 - API Port: 3001
 - WebSocket Port: 8080
+- Frontend Port: 3000
 
 ## Development
 

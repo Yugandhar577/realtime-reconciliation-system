@@ -52,3 +52,8 @@ services:
       - kafka
     environment:
       KAFKA_BROKERS: kafka:29092
+
+  frontend-dashboard:
+    build: ./frontend-dashboard
+    ports:
+      - "3000:8080"
