@@ -45,6 +45,24 @@ JSON schema definitions for all data contracts:
 - API response schemas
 - Validation rules and examples
 
+## Environment Configuration
+
+The system uses environment variables for configuration management. See the main project [README.md](../README.md) for setup instructions.
+
+### Configuration Files
+
+- **[.env.example](../.env.example)**: Template with all available configuration options
+- **[.env](../.env)**: Local configuration file (gitignored, create from .env.example)
+
+### Key Configuration Areas
+
+- **Kafka Settings**: Broker connections, topics, client configurations
+- **Redis Settings**: Connection URLs, snapshot intervals
+- **Service Ports**: API, WebSocket, and frontend ports
+- **Fault Injection**: Testing parameters for producers
+- **Logging**: Log levels and output formats
+- **Monitoring**: Metrics collection and health checks
+
 ## Additional Resources
 
 ### Component Documentation

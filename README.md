@@ -22,6 +22,17 @@ A real-time transaction reconciliation system that matches transactions between 
 - Docker and Docker Compose
 - Node.js 14+ and npm
 
+## Environment Setup
+
+1. **Copy environment configuration**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Update configuration** (optional)
+   - Edit `.env` file with your specific settings
+   - Default values work for local development with Docker
+
 ## Quick Start
 
 1. **Clone the repository**
@@ -74,11 +85,27 @@ A real-time transaction reconciliation system that matches transactions between 
 
 ## Configuration
 
-- Kafka brokers: `localhost:9092` (Docker) or `kafka:29092` (internal)
-- Redis: `localhost:6379` (Docker) or `redis:6379` (internal)
-- API Port: 3001
-- WebSocket Port: 8080
-- Frontend Port: 3000
+The system uses environment variables for configuration. Copy `.env.example` to `.env` and modify as needed.
+
+### Key Environment Variables
+
+- **Kafka**: `KAFKA_BROKERS=localhost:9092` (Docker) or `kafka:29092` (internal)
+- **Redis**: `REDIS_URL=redis://localhost:6379` (Docker) or `redis://redis:6379` (internal)
+- **API Port**: `API_PORT=3001`
+- **WebSocket Port**: `WS_PORT=8080`
+- **Frontend Port**: `VITE_API_BASE_URL=http://localhost:3001`
+
+### Docker vs Local Development
+
+**Docker Environment** (default):
+- Services communicate via Docker network
+- Use `localhost` ports for external access
+- Internal service names for inter-container communication
+
+**Local Development**:
+- Run services individually on host machine
+- Use `localhost` for all connections
+- Manual dependency management
 
 ## Development
 
