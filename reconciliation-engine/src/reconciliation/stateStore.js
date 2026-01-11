@@ -69,6 +69,196 @@ class StateStore {
       ...entry
     };
   }
+
+  // API helper methods
+  getRecentTransactions(limit = 50) {
+    const transactions = Array.from(this.store.values())
+      .sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt)
+      .slice(0, limit);
+
+    return transactions.map(entry => ({
+      transactionId: entry.transactionId || 'unknown',
+      status: this.getStatus(entry),
+      severity: this.getSeverity(entry),
+      summary: this.getSummary(entry),
+      createdAt: new Date(entry.firstSeenAt).toISOString(),
+      anomalies: entry.anomalies || [],
+      timeline: {
+        firstSeenAt: new Date(entry.firstSeenAt).toISOString(),
+        lastUpdatedAt: new Date(entry.lastUpdatedAt).toISOString(),
+        processedAt: entry.cbsEvent?.processedAt,
+        receivedAt: entry.gatewayEvent?.processedAt
+      }
+    }));
+  }
+
+  getTransaction(txId) {
+    const entry = this.get(txId);
+    if (!entry) return null;
+
+    return {
+      transactionId: txId,
+      status: this.getStatus(entry),
+      severity: this.getSeverity(entry),
+      summary: this.getSummary(entry),
+      createdAt: new Date(entry.firstSeenAt).toISOString(),
+      anomalies: entry.anomalies || [],
+      timeline: {
+        firstSeenAt: new Date(entry.firstSeenAt).toISOString(),
+        lastUpdatedAt: new Date(entry.lastUpdatedAt).toISOString(),
+        processedAt: entry.cbsEvent?.processedAt,
+        receivedAt: entry.gatewayEvent?.processedAt
+      }
+    };
+  }
+
+  getMetrics() {
+    let total = 0;
+    let matched = 0;
+    let mismatched = 0;
+    let missing = 0;
+
+    for (const entry of this.store.values()) {
+      total++;
+      const status = this.getStatus(entry);
+      if (status === 'MATCHED') matched++;
+      else if (status === 'MISMATCHED') mismatched++;
+      else if (status.includes('MISSING')) missing++;
+    }
+
+    return {
+      totalTransactions: total,
+      matchedTransactions: matched,
+      mismatchedTransactions: mismatched,
+      missingTransactions: missing,
+      averageLatency: 0, // TODO: calculate
+      systemHealth: total > 0 ? 'healthy' : 'warning'
+    };
+  }
+
+  searchTransactions({ status, severity, startDate, endDate, limit = 50 }) {
+    let results = Array.from(this.store.values());
+
+    if (status) {
+      results = results.filter(entry => this.getStatus(entry) === status);
+    }
+
+    if (severity) {
+      results = results.filter(entry => this.getSeverity(entry) === severity);
+    }
+
+    if (startDate) {
+      const start = new Date(startDate).getTime();
+      results = results.filter(entry => entry.firstSeenAt >= start);
+    }
+
+    if (endDate) {
+      const end = new Date(endDate).getTime();
+      results = results.filter(entry => entry.firstSeenAt <= end);
+    }
+
+    return results
+      .sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt)
+      .slice(0, limit)
+      .map(entry => ({
+        transactionId: entry.transactionId || 'unknown',
+        status: this.getStatus(entry),
+        severity: this.getSeverity(entry),
+        summary: this.getSummary(entry),
+        createdAt: new Date(entry.firstSeenAt).toISOString(),
+        anomalies: entry.anomalies || [],
+        timeline: {
+          firstSeenAt: new Date(entry.firstSeenAt).toISOString(),
+          lastUpdatedAt: new Date(entry.lastUpdatedAt).toISOString(),
+          processedAt: entry.cbsEvent?.processedAt,
+          receivedAt: entry.gatewayEvent?.processedAt
+        }
+      }));
+  }
+
+  getStats() {
+    const stats = {
+      total: 0,
+      matched: 0,
+      mismatched: 0,
+      missing: 0,
+      bySeverity: { LOW: 0, MEDIUM: 0, HIGH: 0 },
+      recentActivity: []
+    };
+
+    for (const entry of this.store.values()) {
+      stats.total++;
+      const status = this.getStatus(entry);
+      if (status === 'MATCHED') stats.matched++;
+      else if (status === 'MISMATCHED') stats.mismatched++;
+      else if (status.includes('MISSING')) stats.missing++;
+
+      const severity = this.getSeverity(entry);
+      stats.bySeverity[severity]++;
+    }
+
+    // Recent activity (last 24 hours, hourly)
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const hourlyBuckets = {};
+
+    for (const entry of this.store.values()) {
+      if (entry.firstSeenAt >= oneDayAgo) {
+        const hour = Math.floor(entry.firstSeenAt / (60 * 60 * 1000));
+        hourlyBuckets[hour] = (hourlyBuckets[hour] || 0) + 1;
+      }
+    }
+
+    stats.recentActivity = Object.entries(hourlyBuckets)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([timestamp, count]) => ({
+        timestamp: new Date(Number(timestamp) * 60 * 60 * 1000).toISOString(),
+        count
+      }));
+
+    return stats;
+  }
+
+  getStatus(entry) {
+    if (entry.cbsEvent && entry.gatewayEvent) {
+      // Check for mismatches
+      const cbsAmount = entry.cbsEvent.amount;
+      const gatewayAmount = entry.gatewayEvent.amount;
+      if (Math.abs(cbsAmount - gatewayAmount) > 0.01) {
+        return 'MISMATCHED';
+      }
+      return 'MATCHED';
+    } else if (entry.cbsEvent) {
+      return 'MISSING_GATEWAY';
+    } else if (entry.gatewayEvent) {
+      return 'MISSING_CBS';
+    }
+    return 'UNKNOWN';
+  }
+
+  getSeverity(entry) {
+    const status = this.getStatus(entry);
+    if (status === 'MISMATCHED') return 'HIGH';
+    if (status.includes('MISSING')) return 'MEDIUM';
+    return 'LOW';
+  }
+
+  getSummary(entry) {
+    const status = this.getStatus(entry);
+    const txId = entry.transactionId || 'unknown';
+    switch (status) {
+      case 'MATCHED':
+        return `Transaction ${txId} successfully reconciled`;
+      case 'MISMATCHED':
+        return `Amount mismatch for transaction ${txId}`;
+      case 'MISSING_GATEWAY':
+        return `Missing gateway event for CBS transaction ${txId}`;
+      case 'MISSING_CBS':
+        return `Missing CBS event for gateway transaction ${txId}`;
+      default:
+        return `Transaction ${txId} in progress`;
+    }
+  }
 }
 
 module.exports = StateStore;

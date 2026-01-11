@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, AlertTriangle, Clock, CheckCircle, ExternalLink } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useReconciliationEvents } from "@/hooks/use-websocket";
+import { useRecentTransactions } from "@/hooks/use-api";
+import { ReconciliationEvent } from "@/lib/websocket";
 
 interface Transaction {
   id: string;
@@ -15,14 +18,33 @@ interface Transaction {
   isDelayed: boolean;
 }
 
-const mockTransactions: Transaction[] = [
-  { id: "TXN-2026-001", status: "MATCHED", summary: "Wire transfer completed successfully", bankAmount: 1250.00, gatewayAmount: 1250.00, delta: 0, timeDiff: 45, bankTimestamp: "14:32:15.234", gatewayTimestamp: "14:32:15.279", isDelayed: false },
-  { id: "TXN-2026-002", status: "WARNING", summary: "Delayed gateway response detected", bankAmount: 5420.50, gatewayAmount: 5420.50, delta: 0, timeDiff: 2150, bankTimestamp: "14:32:18.102", gatewayTimestamp: "14:32:20.252", isDelayed: true },
-  { id: "TXN-2026-003", status: "CRITICAL", summary: "Amount mismatch detected", bankAmount: 890.00, gatewayAmount: 885.00, delta: 5.00, timeDiff: 89, bankTimestamp: "14:32:22.445", gatewayTimestamp: "14:32:22.534", isDelayed: false },
-  { id: "TXN-2026-004", status: "MATCHED", summary: "Payment reconciled", bankAmount: 3200.00, gatewayAmount: 3200.00, delta: 0, timeDiff: 52, bankTimestamp: "14:32:25.112", gatewayTimestamp: "14:32:25.164", isDelayed: false },
-  { id: "TXN-2026-005", status: "CRITICAL", summary: "Missing gateway response", bankAmount: 15750.00, gatewayAmount: 0, delta: 15750.00, timeDiff: -1, bankTimestamp: "14:32:28.889", gatewayTimestamp: "—", isDelayed: false },
-  { id: "TXN-2026-006", status: "WARNING", summary: "High latency warning", bankAmount: 445.25, gatewayAmount: 445.25, delta: 0, timeDiff: 1850, bankTimestamp: "14:32:31.223", gatewayTimestamp: "14:32:33.073", isDelayed: true },
-];
+// Convert reconciliation events to transaction format
+function convertReconciliationEventToTransaction(event: ReconciliationEvent): Transaction {
+  const cbsAmount = event.timeline.processedAt ? 1000 : 0; // Mock amount - would come from event data
+  const gatewayAmount = event.timeline.respondedAt ? 1000 : 0; // Mock amount - would come from event data
+
+  let status: "MATCHED" | "WARNING" | "CRITICAL";
+  if (event.classification === 'MATCHED') status = 'MATCHED';
+  else if (event.severity === 'HIGH') status = 'CRITICAL';
+  else status = 'WARNING';
+
+  const timeDiff = event.timeline.processedAt && event.timeline.respondedAt
+    ? Math.abs(new Date(event.timeline.respondedAt).getTime() - new Date(event.timeline.processedAt).getTime())
+    : -1;
+
+  return {
+    id: event.transactionId,
+    status,
+    summary: event.summary,
+    bankAmount: cbsAmount,
+    gatewayAmount: gatewayAmount,
+    delta: Math.abs(cbsAmount - gatewayAmount),
+    timeDiff,
+    bankTimestamp: event.timeline.processedAt ? new Date(event.timeline.processedAt).toLocaleTimeString() : "—",
+    gatewayTimestamp: event.timeline.respondedAt ? new Date(event.timeline.respondedAt).toLocaleTimeString() : "—",
+    isDelayed: timeDiff > 1000,
+  };
+}
 
 interface TimelineViewProps {
   transaction: Transaction;
@@ -91,9 +113,9 @@ function TimelineView({ transaction }: TimelineViewProps) {
           {/* Gateway Event */}
           <div className="flex flex-col items-center">
             <div className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-2 ${
-              isMissing 
-                ? "bg-destructive/20 border-destructive" 
-                : transaction.isDelayed 
+              isMissing
+                ? "bg-destructive/20 border-destructive"
+                : transaction.isDelayed
                 ? "bg-warning/20 border-warning"
                 : "bg-success/20 border-success"
             }`}>
@@ -127,15 +149,69 @@ function TimelineView({ transaction }: TimelineViewProps) {
 }
 
 export default function Transactions() {
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const { events } = useReconciliationEvents();
+  const { data: recentTransactions } = useRecentTransactions(50);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const getStatusBadge = (status: Transaction["status"]) => {
-    const styles = {
-      MATCHED: "bg-success/10 text-success",
-      WARNING: "bg-warning/10 text-warning",
-      CRITICAL: "bg-destructive/10 text-destructive",
-    };
-    return styles[status];
+  // Combine real-time events with recent transactions
+  const allTransactions = [
+    ...events.map(convertReconciliationEventToTransaction),
+    ...(recentTransactions?.map(tx => ({
+      id: tx.transactionId,
+      status: tx.status === 'MATCHED' ? 'MATCHED' as const :
+              tx.severity === 'HIGH' ? 'CRITICAL' as const : 'WARNING' as const,
+      summary: tx.summary,
+      bankAmount: 1000, // Mock - would need actual amount data
+      gatewayAmount: 1000, // Mock - would need actual amount data
+      delta: 0, // Mock - would need actual delta calculation
+      timeDiff: tx.timeline.processedAt && tx.timeline.respondedAt
+        ? Math.abs(new Date(tx.timeline.respondedAt).getTime() - new Date(tx.timeline.processedAt).getTime())
+        : -1,
+      bankTimestamp: tx.timeline.processedAt ? new Date(tx.timeline.processedAt).toLocaleTimeString() : "—",
+      gatewayTimestamp: tx.timeline.respondedAt ? new Date(tx.timeline.respondedAt).toLocaleTimeString() : "—",
+      isDelayed: false, // Mock - would need delay calculation
+    })) || [])
+  ];
+
+  // Remove duplicates based on transaction ID
+  const uniqueTransactions = allTransactions.filter((tx, index, self) =>
+    index === self.findIndex(t => t.id === tx.id)
+  );
+
+  const toggleRow = (id: string) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "MATCHED":
+        return <CheckCircle className="h-4 w-4 text-success" />;
+      case "WARNING":
+        return <AlertTriangle className="h-4 w-4 text-warning" />;
+      case "CRITICAL":
+        return <AlertTriangle className="h-4 w-4 text-destructive" />;
+      default:
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "MATCHED":
+        return "text-success bg-success/10";
+      case "WARNING":
+        return "text-warning bg-warning/10";
+      case "CRITICAL":
+        return "text-destructive bg-destructive/10";
+      default:
+        return "text-muted-foreground bg-muted/10";
+    }
   };
 
   return (
@@ -143,7 +219,7 @@ export default function Transactions() {
       <div className="card-gradient rounded-lg border border-border overflow-hidden">
         <div className="border-b border-border p-5">
           <h2 className="text-lg font-semibold text-foreground">Transactions</h2>
-          <p className="text-sm text-muted-foreground">Click a row to view details</p>
+          <p className="text-sm text-muted-foreground">Real-time reconciliation events</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -156,41 +232,50 @@ export default function Transactions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {mockTransactions.map((transaction) => (
+              {uniqueTransactions.length > 0 ? uniqueTransactions.map((transaction) => (
                 <>
                   <tr
                     key={transaction.id}
-                    onClick={() => setExpandedRow(expandedRow === transaction.id ? null : transaction.id)}
-                    className="cursor-pointer transition-colors duration-200 hover:bg-muted/30"
+                    className="hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => toggleRow(transaction.id)}
                   >
                     <td className="px-5 py-4">
-                      {expandedRow === transaction.id ? (
+                      {expandedRows.has(transaction.id) ? (
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       ) : (
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
                     </td>
                     <td className="px-5 py-4">
-                      <span className="font-mono text-sm font-medium text-foreground">{transaction.id}</span>
+                      <div className="font-mono text-sm text-foreground">{transaction.id}</div>
                     </td>
                     <td className="px-5 py-4 text-center">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(transaction.status)}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(transaction.status)}`}>
+                        {getStatusIcon(transaction.status)}
                         {transaction.status}
                       </span>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="text-sm text-muted-foreground">{transaction.summary}</span>
+                      <div className="text-sm text-foreground">{transaction.summary}</div>
                     </td>
                   </tr>
-                  {expandedRow === transaction.id && (
-                    <tr key={`${transaction.id}-expanded`}>
-                      <td colSpan={4} className="p-0">
+                  {expandedRows.has(transaction.id) && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-4 bg-muted/20">
                         <TimelineView transaction={transaction} />
                       </td>
                     </tr>
                   )}
                 </>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">
+                    <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No transactions found</p>
+                    <p className="text-sm">Transactions will appear here as they are processed</p>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

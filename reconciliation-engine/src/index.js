@@ -10,6 +10,7 @@ const GatewayConsumer = require('./consumers/gatewayConsumer');
 
 const KafkaProducer = require('./alerts/kafkaProducer');
 const WebSocketEmitter = require('./alerts/websocketEmitter');
+const ApiServer = require('./alerts/apiServer');
 
 const SnapshotStore = require('./persistence/snapshotStore');
 
@@ -24,6 +25,9 @@ async function main() {
 
   // Initialize reconciler with dependencies
   const reconciler = new Reconciler(stateStore, classifier, kafkaProducer, websocketEmitter);
+
+  // Initialize API server
+  const apiServer = new ApiServer(reconciler, stateStore);
 
   // Initialize consumers
   const coreConsumer = new CoreConsumer(reconciler);
@@ -41,6 +45,7 @@ async function main() {
   // Connect producers and emitters
   await kafkaProducer.connect();
   websocketEmitter.start();
+  apiServer.start();
 
   // Start periodic snapshot saving
   snapshotStore.startPeriodicSave();
@@ -70,6 +75,7 @@ async function main() {
 
     // Stop websocket
     websocketEmitter.stop();
+    apiServer.stop();
 
     // Save final snapshot
     await snapshotStore.saveSnapshot();
