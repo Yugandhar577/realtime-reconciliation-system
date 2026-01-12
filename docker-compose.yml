@@ -1,0 +1,189 @@
+version: '3.8'
+
+networks:
+  reconciliation-network:
+    driver: bridge
+
+volumes:
+  kafka-data:
+  zookeeper-data:
+  redis-data:
+
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: reconciliation-zookeeper
+    networks:
+      - reconciliation-network
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    # Volumes commented out to fix Windows Docker Desktop compatibility
+    # volumes:
+    #   - zookeeper-data:/var/lib/zookeeper/data
+    #   - zookeeper-data:/var/lib/zookeeper/log
+    healthcheck:
+      test: [ "CMD-SHELL", "echo ruok | nc localhost 2181 || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: reconciliation-kafka
+    networks:
+      - reconciliation-network
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: reconciliation-redis
+    networks:
+      - reconciliation-network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  reconciliation-engine:
+    build:
+      context: ./reconciliation-engine
+      dockerfile: Dockerfile
+    container_name: reconciliation-engine
+    networks:
+      - reconciliation-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_URL: redis://redis:6379
+      API_PORT: 3001
+      WEBSOCKET_PORT: 8080
+      NODE_ENV: production
+    ports:
+      - "8080:8080"
+      - "3001:3001"
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  corebank-producer:
+    build:
+      context: ./producers/corebank-producer
+      dockerfile: Dockerfile
+    container_name: corebank-producer
+    networks:
+      - reconciliation-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      reconciliation-engine:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      NODE_ENV: production
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  gateway-producer:
+    build:
+      context: ./producers/gateway-producer
+      dockerfile: Dockerfile
+    container_name: gateway-producer
+    networks:
+      - reconciliation-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+      reconciliation-engine:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      NODE_ENV: production
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend-dashboard:
+    build:
+      context: ./frontend-dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3001
+        VITE_WS_URL: ws://localhost:8080
+    container_name: frontend-dashboard
+    networks:
+      - reconciliation-network
+    depends_on:
+      reconciliation-engine:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

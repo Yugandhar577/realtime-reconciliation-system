@@ -1,0 +1,14 @@
+{
+    "name": "realtime-reconciliation-system",
+    "version": "1.0.0",
+    "description": "Real-time transaction reconciliation system",
+    "scripts": {
+        "generate": "node scripts/txGenerator.js",
+        "generate:continuous": "node scripts/txGenerator.js --interval=1000",
+        "generate:fast": "node scripts/txGenerator.js --interval=500 --count=20"
+    },
+    "dependencies": {
+        "kafkajs": "^2.2.4",
+        "minimist": "^1.2.8"
+    }
+}
