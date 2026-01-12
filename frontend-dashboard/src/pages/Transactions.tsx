@@ -160,6 +160,9 @@ export default function Transactions() {
   // Use API transactions as primary data source, supplemented by real-time events
   const transactions = recentTransactions?.map(convertTransactionSummary) || [];
 
+  console.log('Transactions component - recentTransactions:', recentTransactions);
+  console.log('Transactions component - transactions:', transactions);
+
   const toggleRow = (transactionId: string) => {
     const newExpanded = new Set(expandedRows);
     if (newExpanded.has(transactionId)) {

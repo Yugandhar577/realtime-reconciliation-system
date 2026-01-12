@@ -163,7 +163,7 @@ services:
       context: ./frontend-dashboard
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:3001
+        VITE_API_URL: http://localhost:3001/api
         VITE_WS_URL: ws://localhost:8080
     container_name: frontend-dashboard
     networks:

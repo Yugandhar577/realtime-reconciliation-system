@@ -11,6 +11,9 @@ export default function Overview() {
   const { data: transactionStats } = useTransactionStats();
   const { isConnected, connectionState } = useWebSocketContext();
 
+  console.log('Overview component - transactionStats:', transactionStats);
+  console.log('Overview component - events:', events);
+
   // Convert reconciliation events to alert format
   const recentAlerts = events.slice(0, 10).map((event, index) => ({
     id: event.transactionId,

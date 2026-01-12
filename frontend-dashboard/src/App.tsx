@@ -23,30 +23,33 @@ const queryClient = new QueryClient({
   },
 });
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <TooltipProvider>
-        <WebSocketProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<Overview />} />
-                <Route path="/transactions" element={<Transactions />} />
-                <Route path="/transaction/:id" element={<TransactionDetails />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/simulation" element={<Simulation />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </WebSocketProvider>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  console.log("App component rendering...");
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TooltipProvider>
+          <WebSocketProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<Overview />} />
+                  <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/transaction/:id" element={<TransactionDetails />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/simulation" element={<Simulation />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </WebSocketProvider>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

@@ -15,6 +15,8 @@ export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
+  console.log("AppLayout rendering, current path:", location.pathname);
+
   return (
     <div className="min-h-screen flex w-full bg-background">
       {/* Sidebar */}

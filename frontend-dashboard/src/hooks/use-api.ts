@@ -5,7 +5,12 @@ import { apiService, TransactionSummary, SystemMetrics } from '@/lib/api';
 export function useRecentTransactions(limit: number = 50) {
   return useQuery({
     queryKey: ['transactions', 'recent', limit],
-    queryFn: () => apiService.getRecentTransactions(limit),
+    queryFn: async () => {
+      console.log(`Fetching recent transactions with limit ${limit}...`);
+      const result = await apiService.getRecentTransactions(limit);
+      console.log('Recent transactions result:', result);
+      return result;
+    },
     refetchInterval: 30000, // Refetch every 30 seconds
     staleTime: 10000, // Consider data stale after 10 seconds
   });
@@ -30,7 +35,12 @@ export function useSystemMetrics() {
 export function useTransactionStats() {
   return useQuery({
     queryKey: ['transactions', 'stats'],
-    queryFn: () => apiService.getTransactionStats(),
+    queryFn: async () => {
+      console.log('Fetching transaction stats...');
+      const result = await apiService.getTransactionStats();
+      console.log('Transaction stats result:', result);
+      return result;
+    },
     refetchInterval: 10000, // Refetch every 10 seconds
   });
 }

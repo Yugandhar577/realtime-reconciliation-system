@@ -44,6 +44,7 @@ class ApiService {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
+      console.log('API request to:', url);
 
       const response = await fetch(url, {
         headers: {
@@ -53,12 +54,16 @@ class ApiService {
         ...options,
       });
 
+      console.log('API response status:', response.status);
+
       if (!response.ok) {
         console.error(`API request failed: ${response.status} ${response.statusText}`);
         throw new Error(`API request failed: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('API response data:', data);
+      return data;
       return data;
     } catch (error) {
       console.error('API request error:', error);
@@ -250,7 +255,7 @@ class ApiService {
 }
 
 // Singleton instance
-export const apiService = new ApiService();
+export const apiService = new ApiService(import.meta.env.VITE_API_URL || '/api');
 
 // Helper hook for React Query
 export const useApi = () => {
