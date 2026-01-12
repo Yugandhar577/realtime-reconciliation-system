@@ -63,6 +63,7 @@ class SnapshotStore {
       // Hydrate into stateStore
       for (const item of snapshot) {
         const entry = {
+          transactionId: item.txId, // Ensure transactionId is set for backward compatibility
           ...item,
           seenEventIds: new Set(item.seenEventIds),
           seenSources: new Set(item.seenSources)

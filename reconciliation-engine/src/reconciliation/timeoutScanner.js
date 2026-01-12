@@ -71,7 +71,7 @@ class TimeoutScanner {
           };
 
           // Emit the result
-          this.reconciler.finalize(entry, classification);
+          this.reconciler.finalize(txId, entry, classification);
 
           console.log(`Finalized missing transaction ${txId} after ${age}ms`);
         }

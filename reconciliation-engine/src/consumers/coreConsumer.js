@@ -6,8 +6,8 @@ const { brokers, clientId, groupId, topics } = require('../config/kafka');
 class CoreConsumer {
   constructor(reconciler) {
     this.reconciler = reconciler;
-    this.kafka = new Kafka({ brokers, clientId });
-    this.consumer = this.kafka.consumer({ groupId });
+    this.kafka = new Kafka({ brokers, clientId: `${clientId}-core` });
+    this.consumer = this.kafka.consumer({ groupId: `${groupId}-core` });
   }
 
   async start() {

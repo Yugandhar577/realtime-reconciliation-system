@@ -1,36 +1,27 @@
+import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from "recharts";
-
-const mismatchData = [
-  { time: "14:28", count: 2 },
-  { time: "14:29", count: 5 },
-  { time: "14:30", count: 3 },
-  { time: "14:31", count: 8 },
-  { time: "14:32", count: 12 },
-  { time: "14:33", count: 7 },
-  { time: "14:34", count: 4 },
-  { time: "14:35", count: 9 },
-  { time: "14:36", count: 6 },
-  { time: "14:37", count: 11 },
-];
-
-const anomalyData = [
-  { name: "Missing", value: 23 },
-  { name: "Amount Drift", value: 45 },
-  { name: "Time Drift", value: 32 },
-];
-
-const latencyDistribution = [
-  { range: "0-25ms", count: 245 },
-  { range: "25-50ms", count: 412 },
-  { range: "50-100ms", count: 287 },
-  { range: "100-250ms", count: 156 },
-  { range: "250-500ms", count: 78 },
-  { range: "500ms+", count: 34 },
-];
+import { apiService } from "@/lib/api";
 
 const DONUT_COLORS = ["hsl(0, 72%, 51%)", "hsl(38, 92%, 50%)", "hsl(187, 85%, 53%)"];
 
 export default function Analytics() {
+  const { data: mismatchData = [] } = useQuery({
+    queryKey: ['analytics', 'mismatches'],
+    queryFn: () => apiService.getAnalyticsMismatches(),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const { data: anomalyData = [] } = useQuery({
+    queryKey: ['analytics', 'anomalies'],
+    queryFn: () => apiService.getAnalyticsAnomalies(),
+    refetchInterval: 30000,
+  });
+
+  const { data: latencyDistribution = [] } = useQuery({
+    queryKey: ['analytics', 'latency'],
+    queryFn: () => apiService.getAnalyticsLatency(),
+    refetchInterval: 30000,
+  });
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Area Chart - Mismatches per Minute */}

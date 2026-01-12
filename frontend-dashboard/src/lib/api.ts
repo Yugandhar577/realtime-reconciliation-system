@@ -25,6 +25,15 @@ export interface SystemMetrics {
   systemHealth: 'healthy' | 'warning' | 'critical';
 }
 
+export interface FaultStatus {
+  activeFaults: Array<{
+    type: string;
+    target: string;
+    enabled: boolean;
+    expiresAt?: number;
+  }>;
+}
+
 class ApiService {
   private baseUrl: string;
 
@@ -175,6 +184,67 @@ class ApiService {
         bySeverity: {},
         recentActivity: [],
       };
+    }
+  }
+
+  // Analytics endpoints
+  async getAnalyticsMismatches(): Promise<Array<{ time: string; count: number }>> {
+    try {
+      return await this.request('/analytics/mismatches');
+    } catch (error) {
+      console.error('Failed to fetch analytics mismatches:', error);
+      return [];
+    }
+  }
+
+  async getAnalyticsAnomalies(): Promise<Array<{ name: string; value: number }>> {
+    try {
+      return await this.request('/analytics/anomalies');
+    } catch (error) {
+      console.error('Failed to fetch analytics anomalies:', error);
+      return [];
+    }
+  }
+
+  async getAnalyticsLatency(): Promise<Array<{ range: string; count: number }>> {
+    try {
+      return await this.request('/analytics/latency');
+    } catch (error) {
+      console.error('Failed to fetch analytics latency:', error);
+      return [];
+    }
+  }
+
+  // Fault injection endpoints
+  async getFaultStatus(): Promise<FaultStatus> {
+    try {
+      return await this.request('/faults/status');
+    } catch (error) {
+      console.error('Failed to fetch fault status:', error);
+      return { activeFaults: [] };
+    }
+  }
+
+  async injectFault(type: string, target: string, duration?: number): Promise<{ success: boolean; message: string }> {
+    try {
+      return await this.request('/faults/inject', {
+        method: 'POST',
+        body: JSON.stringify({ type, target, duration }),
+      });
+    } catch (error) {
+      console.error('Failed to inject fault:', error);
+      throw error;
+    }
+  }
+
+  async clearFaults(): Promise<{ success: boolean; message: string }> {
+    try {
+      return await this.request('/faults/clear', {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Failed to clear faults:', error);
+      throw error;
     }
   }
 }

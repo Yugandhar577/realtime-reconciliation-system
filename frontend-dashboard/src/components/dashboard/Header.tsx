@@ -38,7 +38,7 @@ export function Header() {
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-sm font-medium text-primary">
             JD
           </div>
-          <span className="hidden text-sm font-medium text-foreground md:block">John Doe</span>
+          <span className="hidden text-sm font-medium text-foreground md:block">Yugandhar Paulbudhe</span>
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>

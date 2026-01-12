@@ -4,6 +4,8 @@ class StateStore {
   constructor() {
     this.store = new Map();
     this.processedEventIds = new Set();
+    this.completedTransactions = [];
+    this.maxCompletedTransactions = 1000; // Keep last 1000 completed transactions
   }
 
   get(txId) {
@@ -18,6 +20,14 @@ class StateStore {
     this.store.delete(txId);
   }
 
+  addCompletedTransaction(result) {
+    this.completedTransactions.unshift(result);
+    // Keep only the most recent transactions
+    if (this.completedTransactions.length > this.maxCompletedTransactions) {
+      this.completedTransactions = this.completedTransactions.slice(0, this.maxCompletedTransactions);
+    }
+  }
+
   upsert(txId, patch) {
     const existing = this.get(txId);
     if (existing) {
@@ -26,6 +36,7 @@ class StateStore {
       return updated;
     } else {
       const newEntry = {
+        transactionId: txId,
         ...patch,
         firstSeenAt: Date.now(),
         lastUpdatedAt: Date.now(),
@@ -72,24 +83,9 @@ class StateStore {
 
   // API helper methods
   getRecentTransactions(limit = 50) {
-    const transactions = Array.from(this.store.values())
-      .sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt)
+    return this.completedTransactions
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, limit);
-
-    return transactions.map(entry => ({
-      transactionId: entry.transactionId || 'unknown',
-      status: this.getStatus(entry),
-      severity: this.getSeverity(entry),
-      summary: this.getSummary(entry),
-      createdAt: new Date(entry.firstSeenAt).toISOString(),
-      anomalies: entry.anomalies || [],
-      timeline: {
-        firstSeenAt: new Date(entry.firstSeenAt).toISOString(),
-        lastUpdatedAt: new Date(entry.lastUpdatedAt).toISOString(),
-        processedAt: entry.cbsEvent?.processedAt,
-        receivedAt: entry.gatewayEvent?.processedAt
-      }
-    }));
   }
 
   getTransaction(txId) {
@@ -186,15 +182,18 @@ class StateStore {
       recentActivity: []
     };
 
-    for (const entry of this.store.values()) {
+    // Calculate stats from completed transactions
+    for (const transaction of this.completedTransactions) {
       stats.total++;
-      const status = this.getStatus(entry);
+      const status = transaction.classification;
       if (status === 'MATCHED') stats.matched++;
       else if (status === 'MISMATCHED') stats.mismatched++;
       else if (status.includes('MISSING')) stats.missing++;
 
-      const severity = this.getSeverity(entry);
-      stats.bySeverity[severity]++;
+      const severity = transaction.severity;
+      if (stats.bySeverity[severity] !== undefined) {
+        stats.bySeverity[severity]++;
+      }
     }
 
     // Recent activity (last 24 hours, hourly)

@@ -47,7 +47,7 @@ class WebSocketService {
 
       try {
         // Use provided URL or construct from current location
-        const wsUrl = this.url || `ws://${window.location.hostname}:${window.location.port}/ws`;
+        const wsUrl = this.url || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {

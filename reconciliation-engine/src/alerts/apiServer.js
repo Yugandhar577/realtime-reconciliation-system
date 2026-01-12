@@ -4,11 +4,13 @@ const express = require('express');
 
 class ApiServer {
   constructor(reconciler, stateStore, port = 3001) {
+    console.log('ApiServer constructor called with port:', port);
     this.reconciler = reconciler;
     this.stateStore = stateStore;
     this.port = port;
     this.app = express();
     this.server = null;
+    this.faultConfig = { enabled: false, type: 'NONE', target: null };
 
     this.setupRoutes();
   }
@@ -37,7 +39,6 @@ class ApiServer {
       });
     });
 
-
     // Get recent transactions
     this.app.get('/api/transactions/recent', (req, res) => {
       try {
@@ -65,6 +66,138 @@ class ApiServer {
       }
     });
 
+    // Get transaction stats
+    this.app.get('/api/transactions/stats', (req, res) => {
+      try {
+        const stats = this.stateStore.getStats();
+
+        res.json({
+          total: stats.total || 0,
+          matched: stats.matched || 0,
+          mismatched: stats.mismatched || 0,
+          missing: stats.missing || 0,
+          bySeverity: stats.bySeverity || {},
+          recentActivity: stats.recentActivity || []
+        });
+      } catch (error) {
+        console.error('Error getting stats:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+    // Fault injection endpoints
+    this.app.post('/api/faults/inject', (req, res) => {
+      try {
+        const { type, target, duration = 30000 } = req.body; // duration in ms, default 30s
+
+        if (!type || !target) {
+          return res.status(400).json({ error: 'Missing type or target parameter' });
+        }
+
+        // Store fault configuration (in a real system, this would be persisted)
+        this.faultConfig = {
+          type: type.toUpperCase(),
+          target: target.toUpperCase(),
+          enabled: true,
+          expiresAt: Date.now() + duration
+        };
+
+        console.log(`Fault injection activated: ${type} on ${target} for ${duration}ms`);
+
+        res.json({
+          success: true,
+          message: `Fault ${type} injected on ${target}`,
+          config: this.faultConfig
+        });
+      } catch (error) {
+        console.error('Error injecting fault:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/faults/clear', (req, res) => {
+      try {
+        this.faultConfig = { enabled: false, type: 'NONE', target: null };
+        console.log('All faults cleared');
+        res.json({ success: true, message: 'All faults cleared' });
+      } catch (error) {
+        console.error('Error clearing faults:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/faults/status', (req, res) => {
+      try {
+        const activeFaults = this.faultConfig && this.faultConfig.enabled ? [this.faultConfig] : [];
+        res.json({ activeFaults });
+      } catch (error) {
+        console.error('Error getting fault status:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    // Analytics endpoints
+    // this.app.get('/api/test', (req, res) => {
+    //   console.log('Test route called');
+    //   res.json({ message: 'Test endpoint working' });
+    // });
+
+    this.app.get('/api/analytics/mismatches', (req, res) => {
+      try {
+        const stats = this.stateStore.getStats();
+        const recentActivity = stats.recentActivity || [];
+
+        // Convert to chart format
+        const chartData = recentActivity.map(item => ({
+          time: new Date(item.timestamp).toLocaleTimeString('en-US', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          count: item.count
+        }));
+
+        res.json(chartData);
+      } catch (error) {
+        console.error('Error getting mismatch analytics:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/analytics/anomalies', (req, res) => {
+      try {
+        const stats = this.stateStore.getStats();
+
+        const anomalyData = [
+          { name: "Missing", value: stats.missing || 0 },
+          { name: "Amount Mismatch", value: stats.mismatched || 0 },
+          { name: "Matched", value: stats.matched || 0 },
+        ];
+
+        res.json(anomalyData);
+      } catch (error) {
+        console.error('Error getting anomaly analytics:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/analytics/latency', (req, res) => {
+      try {
+        // Mock latency distribution for now - in a real system this would be measured
+        const latencyDistribution = [
+          { range: "0-25ms", count: Math.floor(Math.random() * 50) + 200 },
+          { range: "25-50ms", count: Math.floor(Math.random() * 50) + 150 },
+          { range: "50-100ms", count: Math.floor(Math.random() * 50) + 100 },
+          { range: "100-250ms", count: Math.floor(Math.random() * 50) + 50 },
+          { range: "250-500ms", count: Math.floor(Math.random() * 20) + 20 },
+          { range: "500ms+", count: Math.floor(Math.random() * 10) + 5 },
+        ];
+
+        res.json(latencyDistribution);
+      } catch (error) {
+        console.error('Error getting latency analytics:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
     // Get transaction by ID
     this.app.get('/api/transactions/:id', (req, res) => {
       try {
@@ -148,38 +281,12 @@ class ApiServer {
       }
     });
 
-    // Get transaction stats
-    this.app.get('/api/transactions/stats', (req, res) => {
-      try {
-        const stats = this.stateStore.getStats();
-
-        res.json({
-          total: stats.total || 0,
-          matched: stats.matched || 0,
-          mismatched: stats.mismatched || 0,
-          missing: stats.missing || 0,
-          bySeverity: stats.bySeverity || {},
-          recentActivity: stats.recentActivity || []
-        });
-      } catch (error) {
-        console.error('Error getting stats:', error);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-    });
   }
 
   start() {
     this.server = this.app.listen(this.port, () => {
       console.log(`API server started on port ${this.port}`);
     });
-  }
-
-  stop() {
-    if (this.server) {
-      this.server.close(() => {
-        console.log('API server stopped');
-      });
-    }
   }
 }
 

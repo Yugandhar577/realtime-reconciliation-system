@@ -46,7 +46,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Reset Demo Data */}
+      {/* Reset Demo Data
       <div className="card-gradient rounded-lg border border-border p-6">
         <div className="flex items-center gap-4 mb-4">
           <div className="p-3 rounded-lg bg-warning/10">
@@ -63,7 +63,7 @@ export default function SettingsPage() {
         >
           Reset All Data
         </button>
-      </div>
+      </div> */}
 
       {/* System Info */}
       <div className="card-gradient rounded-lg border border-border p-6">

@@ -1,48 +1,103 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Zap, Wifi, AlertTriangle, Activity, RotateCcw, Play, Pause } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { apiService, FaultStatus } from "@/lib/api";
 
 export default function Simulation() {
   const [simulationMode, setSimulationMode] = useState(false);
+  const [activeFaults, setActiveFaults] = useState<FaultStatus>({ activeFaults: [] });
   const { toast } = useToast();
 
-  const handleAction = (action: string, description: string) => {
+  // Fetch current fault status
+  useEffect(() => {
+    const fetchFaultStatus = async () => {
+      try {
+        const status = await apiService.getFaultStatus();
+        setActiveFaults(status);
+      } catch (error) {
+        console.error('Failed to fetch fault status:', error);
+      }
+    };
+
+    fetchFaultStatus();
+    const interval = setInterval(fetchFaultStatus, 5000); // Refresh every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleFaultInjection = async (type: string, target: string, description: string) => {
+    try {
+      await apiService.injectFault(type, target, 30000); // 30 seconds
+
+      toast({
+        title: `${type} Fault Injected`,
+        description: description,
+        duration: 3000,
+      });
+
+      // Refresh fault status
+      const status = await apiService.getFaultStatus();
+      setActiveFaults(status);
+    } catch (error) {
+      toast({
+        title: "Fault Injection Failed",
+        description: "Failed to inject fault. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleClearFaults = async () => {
+    try {
+      await apiService.clearFaults();
+
+      toast({
+        title: "Faults Cleared",
+        description: "All active faults have been cleared",
+        duration: 3000,
+      });
+
+      setActiveFaults({ activeFaults: [] });
+    } catch (error) {
+      toast({
+        title: "Clear Faults Failed",
+        description: "Failed to clear faults. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleAction = (actionName: string, description: string) => {
     toast({
-      title: `${action} Triggered`,
+      title: `${actionName} Initiated`,
       description: description,
       duration: 3000,
     });
   };
 
   const actions = [
-    { 
-      label: "Inject Latency", 
-      icon: Zap, 
+    {
+      label: "Gateway Timeout",
+      icon: Zap,
       color: "warning",
-      description: "Adds artificial delay (500ms) to simulate slow network conditions",
-      onClick: () => handleAction("Inject Latency", "Adding 500ms delay to all transactions")
+      description: "Simulates gateway timeout failures",
+      onClick: () => handleFaultInjection("GATEWAY_TIMEOUT", "GATEWAY", "Gateway will timeout for 30 seconds")
     },
-    { 
-      label: "Drop Packets", 
-      icon: Wifi, 
+    {
+      label: "CBS Failure",
+      icon: Wifi,
       color: "destructive",
-      description: "Simulates 10% packet loss on the gateway connection",
-      onClick: () => handleAction("Drop Packets", "Simulating 10% packet loss on gateway connection")
+      description: "Simulates CBS transaction failures",
+      onClick: () => handleFaultInjection("CBS_FAILURE", "CBS", "CBS will fail transactions for 30 seconds")
     },
-    { 
-      label: "Corrupt Amounts", 
-      icon: AlertTriangle, 
+    {
+      label: "Amount Mismatch",
+      icon: AlertTriangle,
       color: "destructive",
-      description: "Introduces random discrepancies in transaction amounts",
-      onClick: () => handleAction("Corrupt Amounts", "Introducing random amount discrepancies")
-    },
-    { 
-      label: "Traffic Burst", 
-      icon: Activity, 
-      color: "primary",
-      description: "Generates high volume traffic (1000 TPS) to stress test",
-      onClick: () => handleAction("Traffic Burst", "Generating 1000 transactions per second")
+      description: "Introduces amount discrepancies between CBS and Gateway",
+      onClick: () => handleFaultInjection("AMOUNT_MISMATCH", "GATEWAY", "Gateway will send modified amounts for 30 seconds")
     },
   ];
 
@@ -112,13 +167,43 @@ export default function Simulation() {
         </div>
       </div>
 
+      {/* Active Faults */}
+      {activeFaults.activeFaults.length > 0 && (
+        <div className="card-gradient rounded-lg border border-border p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Active Faults</h3>
+          <div className="space-y-3">
+            {activeFaults.activeFaults.map((fault, index) => (
+              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <div>
+                    <span className="text-sm font-medium text-destructive">{fault.type}</span>
+                    <span className="text-xs text-muted-foreground ml-2">on {fault.target}</span>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {fault.expiresAt ? `Expires in ${Math.ceil((fault.expiresAt - Date.now()) / 1000)}s` : 'Active'}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={handleClearFaults}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-muted border border-border py-3 text-sm font-medium transition-all duration-200 hover:bg-muted/80"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Clear All Faults
+          </button>
+        </div>
+      )}
+
       {/* Auto-Resolve */}
       <div className="card-gradient rounded-lg border border-border p-6">
         <div className="flex items-start gap-4">
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-foreground">Auto-Resolve</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Automatically attempt to reconcile all pending transactions. This will match transactions 
+              Automatically attempt to reconcile all pending transactions. This will match transactions
               based on reference IDs and timestamps, then flag any remaining discrepancies for manual review.
             </p>
           </div>

@@ -38,7 +38,7 @@ class Reconciler {
 
     if (shouldFinalize) {
       const classification = this.classifier.evaluate(entry);
-      this.finalize(entry, classification);
+      this.finalize(transactionId, entry, classification);
     }
   }
 
@@ -68,8 +68,11 @@ class Reconciler {
     return false;
   }
 
-  finalize(entry, classification) {
-    const result = this.buildResult(entry, classification);
+  finalize(transactionId, entry, classification) {
+    const result = this.buildResult(transactionId, entry, classification);
+
+    // Store completed transaction for API access
+    this.stateStore.addCompletedTransaction(result);
 
     // Emit to Kafka
     this.kafkaProducer.publishAlert(result);
@@ -78,14 +81,14 @@ class Reconciler {
     this.websocketEmitter.emitEvent(result);
 
     // Clean up entry
-    this.stateStore.delete(entry.transactionId || entry.txId);
+    this.stateStore.delete(transactionId);
   }
 
-  buildResult(entry, classification) {
+  buildResult(transactionId, entry, classification) {
     const timeline = this.buildTimeline(entry);
 
     return {
-      transactionId: entry.transactionId || entry.txId,
+      transactionId: transactionId,
       classification: classification.status,
       severity: classification.severity,
       summary: `Transaction ${classification.status} with anomalies: ${classification.anomalies.join(', ')}`,
@@ -110,8 +113,12 @@ class Reconciler {
       timeline.respondedAt = entry.gatewayEvent.respondedAt;
     }
 
-    timeline.firstSeenAt = new Date(entry.firstSeenAt).toISOString();
-    timeline.lastUpdatedAt = new Date(entry.lastUpdatedAt).toISOString();
+    // Safely convert timestamps to ISO strings
+    const firstSeenDate = new Date(entry.firstSeenAt);
+    timeline.firstSeenAt = isNaN(firstSeenDate.getTime()) ? new Date().toISOString() : firstSeenDate.toISOString();
+
+    const lastUpdatedDate = new Date(entry.lastUpdatedAt);
+    timeline.lastUpdatedAt = isNaN(lastUpdatedDate.getTime()) ? new Date().toISOString() : lastUpdatedDate.toISOString();
 
     return timeline;
   }

@@ -18,7 +18,14 @@ export default function Overview() {
     message: event.summary,
     type: event.severity === 'HIGH' ? 'warning' as const :
           event.severity === 'MEDIUM' ? 'info' as const : 'success' as const,
-    time: formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }),
+    time: (() => {
+      try {
+        return formatDistanceToNow(new Date(event.createdAt), { addSuffix: true });
+      } catch (e) {
+        console.error('Invalid date for event createdAt:', event.createdAt);
+        return "Invalid Date";
+      }
+    })(),
   }));
 
   return (
