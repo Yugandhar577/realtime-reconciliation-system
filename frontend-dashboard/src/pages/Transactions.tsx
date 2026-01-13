@@ -153,6 +153,7 @@ function TimelineView({ transaction }: TimelineViewProps) {
 }
 
 export default function Transactions() {
+  console.log('Transactions component rendering at', new Date().toISOString());
   const { events } = useReconciliationEvents();
   const { data: recentTransactions } = useRecentTransactions(50);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());

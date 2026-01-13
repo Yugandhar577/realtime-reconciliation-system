@@ -218,6 +218,11 @@ class StateStore {
     return stats;
   }
 
+  getRecentTransactions(limit = 50) {
+    console.log('getRecentTransactions called, completedTransactions length:', this.completedTransactions.length);
+    return this.completedTransactions.slice(0, limit);
+  }
+
   getStatus(entry) {
     if (entry.cbsEvent && entry.gatewayEvent) {
       // Check for mismatches

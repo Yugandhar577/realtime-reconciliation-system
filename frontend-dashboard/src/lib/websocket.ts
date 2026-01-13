@@ -153,7 +153,7 @@ class WebSocketService {
 }
 
 // Singleton instance
-export const websocketService = new WebSocketService();
+export const websocketService = new WebSocketService(import.meta.env.VITE_WS_URL);
 
 // Helper hook for React components
 export const useWebSocket = () => {

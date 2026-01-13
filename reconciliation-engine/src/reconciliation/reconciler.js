@@ -89,7 +89,10 @@ class Reconciler {
 
     return {
       transactionId: transactionId,
+      // Keep `classification` for backwards compatibility (used by WebSocket events),
+      // and also expose `status` which the API and frontend expect.
       classification: classification.status,
+      status: classification.status,
       severity: classification.severity,
       summary: `Transaction ${classification.status} with anomalies: ${classification.anomalies.join(', ')}`,
       cbsEventId: entry.cbsEvent?.eventId,

@@ -23,7 +23,7 @@ export default function Overview() {
           event.severity === 'MEDIUM' ? 'info' as const : 'success' as const,
     time: (() => {
       try {
-        return formatDistanceToNow(new Date(event.createdAt), { addSuffix: true });
+        return formatDistanceToNow(new Date(event.createdAt || new Date()), { addSuffix: true });
       } catch (e) {
         console.error('Invalid date for event createdAt:', event.createdAt);
         return "Invalid Date";

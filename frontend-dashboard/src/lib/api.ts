@@ -255,7 +255,7 @@ class ApiService {
 }
 
 // Singleton instance
-export const apiService = new ApiService(import.meta.env.VITE_API_URL || '/api');
+export const apiService = new ApiService('/api');
 
 // Helper hook for React Query
 export const useApi = () => {
