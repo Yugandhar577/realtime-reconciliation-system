@@ -58,8 +58,17 @@ class WebSocketService {
 
         this.ws.onmessage = (event) => {
           try {
-            const data: WebSocketEvent = JSON.parse(event.data);
-            this.notifyListeners(data.type || 'reconciliation-event', data);
+            const parsed = JSON.parse(event.data);
+            // If backend wraps reconciliation event in { type, data }, unwrap it
+            if (parsed && parsed.type === 'reconciliation-event' && parsed.data) {
+              const payload = Object.assign({}, parsed.data, { type: parsed.type });
+              console.log('WebSocket received reconciliation-event (unwrapped):', payload);
+              this.notifyListeners(parsed.type, payload as WebSocketEvent);
+            } else {
+              const data: WebSocketEvent = parsed;
+              console.log('WebSocket received message:', data);
+              this.notifyListeners(data.type || 'reconciliation-event', data);
+            }
           } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
           }

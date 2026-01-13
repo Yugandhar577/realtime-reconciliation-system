@@ -38,10 +38,15 @@ class WebSocketEmitter {
   emitEvent(reconResult) {
     if (!this.wss) return;
 
-    const message = JSON.stringify({
-      type: 'reconciliation-event',
-      data: reconResult
-    });
+    // For compatibility with older clients, emit as { type, data }
+    const wrapped = { type: 'reconciliation-event', data: reconResult };
+    const message = JSON.stringify(wrapped);
+    // Also log the emitted payload shape for frontend debugging
+    try {
+      console.log('Emitting reconciliation-event via WebSocket:', JSON.stringify(reconResult));
+    } catch (e) {
+      console.log('Emitting reconciliation-event (unable to stringify reconResult)');
+    }
 
     this.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
