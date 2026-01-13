@@ -132,41 +132,34 @@ export function SystemHealthCard({ isConnected, stats }: { isConnected?: boolean
     { name: "Kafka", status: "healthy" }, // Assume healthy if we have data
   ];
 
-  const allHealthy = systems.every(s => s.status === "healthy");
+  const allHealthy = systems.every((s) => s.status === "healthy");
 
   return (
-    <div className={`card-gradient rounded-lg border p-5 transition-all duration-300 ${allHealthy ? 'border-success/30 glow-success' : 'border-destructive/30'}`}
-         style={{ boxShadow: !allHealthy ? '0 0 40px hsl(0 72% 51% / 0.2)' : undefined }}>
-      <div className="flex items-start justify-between">
-        <div className="space-y-3">
+    <div
+      className={`rounded-lg border p-5 transition-all duration-200 bg-card overflow-hidden ${allHealthy ? 'border-success/20' : 'border-destructive/20'}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="space-y-2 flex-1">
           <p className="text-sm font-medium text-muted-foreground">System Health</p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             {systems.map((system) => (
-              <div key={system.name} className="flex items-center gap-2">
-                <div className="relative">
-                  <div
-                    className={`h-3 w-3 rounded-full ${
-                      system.status === "healthy"
-                        ? "bg-success"
-                        : system.status === "degraded"
-                        ? "bg-warning"
-                        : "bg-destructive"
-                    }`}
-                  />
-                  {system.status === "healthy" && (
-                    <div className="absolute inset-0 h-3 w-3 animate-ping rounded-full bg-success opacity-40" />
-                  )}
-                </div>
-                <span className="text-sm font-medium text-foreground">{system.name}</span>
+              <div key={system.name} className="flex items-center gap-2 min-w-[96px]">
+                <div
+                  className={`h-3 w-3 rounded-full ${
+                    system.status === 'healthy' ? 'bg-success' : system.status === 'degraded' ? 'bg-warning' : 'bg-destructive'
+                  }`}
+                />
+                <span className="text-sm text-foreground truncate">{system.name}</span>
               </div>
             ))}
           </div>
-          <p className={`text-xs font-medium ${allHealthy ? 'text-success' : 'text-destructive'}`}>
+          <p className={`text-sm font-medium mt-2 ${allHealthy ? 'text-success' : 'text-destructive'}`}>
             {allHealthy ? 'All systems operational' : 'Issues detected'}
           </p>
         </div>
-        <div className={`rounded-lg p-2.5 ${allHealthy ? 'bg-success/10' : 'bg-destructive/10'}`}>
-          <Server className={`h-5 w-5 ${allHealthy ? 'text-success' : 'text-destructive'}`} />
+
+        <div className={`flex items-center justify-center h-9 w-9 rounded-full ${allHealthy ? 'bg-success/5' : 'bg-destructive/5'}`}>
+          <Server className={`h-4 w-4 ${allHealthy ? 'text-success' : 'text-destructive'}`} />
         </div>
       </div>
     </div>
