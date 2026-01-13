@@ -211,6 +211,9 @@ export default function Transactions() {
             Monitor and analyze transaction reconciliation results
           </p>
         </div>
+        <div>
+          <DownloadReportButton />
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card">
@@ -281,5 +284,57 @@ export default function Transactions() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DownloadReportButton() {
+  const [loading, setLoading] = useState(false);
+
+  const getFilenameFromDisposition = (disp: string | null) => {
+    if (!disp) return null;
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/.exec(disp);
+    return match ? decodeURIComponent(match[1]) : null;
+  };
+
+  const handleDownload = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/transactions/report?limit=500');
+      if (!res.ok) throw new Error('Failed to fetch report');
+
+      const blob = await res.blob();
+      // Try to get filename from headers, fallback to timestamped name
+      const disp = res.headers.get('Content-Disposition');
+      let filename = getFilenameFromDisposition(disp) || '';
+      if (!filename) {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        filename = `reconciliation_report_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.csv`;
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Failed to download report');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-white text-sm font-medium hover:bg-gray-50"
+      onClick={handleDownload}
+      disabled={loading}
+    >
+      {loading ? 'Preparing…' : 'Download Report'}
+    </button>
   );
 }

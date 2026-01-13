@@ -100,7 +100,24 @@ class Reconciler {
       timeline,
       createdAt: new Date().toISOString(),
       anomalies: classification.anomalies,
-      recommendedAction: classification.recommendedAction
+      recommendedAction: classification.recommendedAction,
+      // Enrich result with account/event level details useful for reporting
+      amountCBS: entry.cbsEvent?.amount ?? null,
+      amountGateway: entry.gatewayEvent?.amount ?? null,
+      currency: entry.cbsEvent?.currency || entry.gatewayEvent?.currency || null,
+      cbsStatus: entry.cbsEvent?.status || null,
+      gatewayStatus: entry.gatewayEvent?.status || null,
+      // timeDeltaMs: difference between CBS processedAt and Gateway respondedAt if available
+      timeDeltaMs: (() => {
+        try {
+          const a = timeline.processedAt ? Date.parse(timeline.processedAt) : null;
+          const b = timeline.respondedAt ? Date.parse(timeline.respondedAt) : null;
+          if (a && b && !isNaN(a) && !isNaN(b)) return Math.abs(a - b);
+        } catch (e) {
+          return null;
+        }
+        return null;
+      })()
     };
   }
 

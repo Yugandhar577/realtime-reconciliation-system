@@ -23,9 +23,13 @@ export function AppLayout() {
       <aside className="w-64 border-r border-border bg-card/50 flex flex-col">
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">F</span>
-            </div>
+            {/* Logo: use main logo from repo Assets, fallback to placeholder.svg */}
+            <img
+              src="/Main_Logo.png"
+              alt="FinFlow"
+              className="h-12 w-auto"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/placeholder.svg'; }}
+            />
             <span className="text-xl font-semibold text-gradient-primary">FinFlow</span>
           </div>
         </div>
@@ -84,7 +88,7 @@ export function AppLayout() {
                 placeholder="Search..."
                 className="w-40 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
-              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">⌘K</kbd>
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">⌘</kbd>
             </div>
             <button className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground">
               <Bell className="h-5 w-5" />

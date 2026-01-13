@@ -198,6 +198,71 @@ class ApiServer {
         res.status(500).json({ error: 'Internal server error' });
       }
     });
+
+    // Download CSV report of recent transactions
+    this.app.get('/api/transactions/report', (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit) || 500;
+        const transactions = this.stateStore.getRecentTransactions(limit);
+
+        // CSV header
+        const columns = [
+          'transactionId',
+          'status',
+          'classification',
+          'anomalies',
+          'severity',
+          'amountCBS',
+          'amountGateway',
+          'currency',
+          'cbsStatus',
+          'gatewayStatus',
+          'timeDeltaMs',
+          'createdAt'
+        ];
+
+        const escape = (val) => {
+          if (val === null || val === undefined) return '';
+          const s = String(val);
+          return '"' + s.replace(/"/g, '""') + '"';
+        };
+
+        const lines = [columns.join(',')];
+
+        for (const tx of transactions) {
+          const anomalies = Array.isArray(tx.anomalies) ? tx.anomalies.join('|') : (tx.anomalies || '');
+          const row = [
+            escape(tx.transactionId),
+            escape(tx.status || tx.classification || ''),
+            escape(tx.classification || tx.status || ''),
+            escape(anomalies),
+            escape(tx.severity || ''),
+            escape(tx.amountCBS ?? ''),
+            escape(tx.amountGateway ?? ''),
+            escape(tx.currency ?? ''),
+            escape(tx.cbsStatus ?? ''),
+            escape(tx.gatewayStatus ?? ''),
+            escape(tx.timeDeltaMs ?? ''),
+            escape(tx.createdAt || '')
+          ];
+
+          lines.push(row.join(','));
+        }
+
+        const csv = lines.join('\n');
+
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const filename = `reconciliation_report_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.csv`;
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(csv);
+      } catch (error) {
+        console.error('Error generating transactions report:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
     // Get transaction by ID
     this.app.get('/api/transactions/:id', (req, res) => {
       try {
@@ -280,6 +345,8 @@ class ApiServer {
         res.status(500).json({ error: 'Internal server error' });
       }
     });
+
+    // (report route moved earlier to avoid conflict with '/api/transactions/:id')
 
   }
 

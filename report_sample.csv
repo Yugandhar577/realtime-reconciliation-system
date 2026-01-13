@@ -1,0 +1,1 @@
+transactionId,status,classification,anomalies,severity,amountCBS,amountGateway,currency,cbsStatus,gatewayStatus,timeDeltaMs,createdAt
