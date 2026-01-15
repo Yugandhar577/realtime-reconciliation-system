@@ -182,36 +182,38 @@ class StateStore {
       recentActivity: []
     };
 
-    // Calculate stats from completed transactions
+    // Calculate stats from completed transactions history (more reliable for high-throughput)
     for (const transaction of this.completedTransactions) {
       stats.total++;
       const status = transaction.classification;
       if (status === 'MATCHED') stats.matched++;
       else if (status === 'MISMATCHED') stats.mismatched++;
-      else if (status.includes('MISSING')) stats.missing++;
+      else if (status && status.includes('MISSING')) stats.missing++;
 
-      const severity = transaction.severity;
+      const severity = transaction.severity || 'LOW';
       if (stats.bySeverity[severity] !== undefined) {
         stats.bySeverity[severity]++;
       }
     }
 
-    // Recent activity (last 24 hours, hourly)
+    // Recent activity (last 60 minutes, per-minute buckets)
     const now = Date.now();
-    const oneDayAgo = now - 24 * 60 * 60 * 1000;
-    const hourlyBuckets = {};
+    const oneHourAgo = now - 60 * 60 * 1000;
+    const minuteBuckets = {};
 
-    for (const entry of this.store.values()) {
-      if (entry.firstSeenAt >= oneDayAgo) {
-        const hour = Math.floor(entry.firstSeenAt / (60 * 60 * 1000));
-        hourlyBuckets[hour] = (hourlyBuckets[hour] || 0) + 1;
-      }
+    for (const tx of this.completedTransactions) {
+      // transactions store createdAt as ISO string
+      const ts = tx.createdAt ? Date.parse(tx.createdAt) : null;
+      if (!ts || isNaN(ts)) continue;
+      if (ts < oneHourAgo) continue;
+      const minute = Math.floor(ts / (60 * 1000));
+      minuteBuckets[minute] = (minuteBuckets[minute] || 0) + 1;
     }
 
-    stats.recentActivity = Object.entries(hourlyBuckets)
+    stats.recentActivity = Object.entries(minuteBuckets)
       .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([timestamp, count]) => ({
-        timestamp: new Date(Number(timestamp) * 60 * 60 * 1000).toISOString(),
+      .map(([minute, count]) => ({
+        timestamp: new Date(Number(minute) * 60 * 1000).toISOString(),
         count
       }));
 
