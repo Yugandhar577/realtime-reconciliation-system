@@ -43,6 +43,11 @@ The system consists of:
    docker-compose up -d
    ```
 
+   On Windows PowerShell, you can run a full reset + startup (including volume cleanup) with one command:
+   ```powershell
+   .\scripts\start-reset.ps1
+   ```
+
    This will start:
    - Zookeeper (Kafka dependency)
    - Kafka message broker
@@ -176,6 +181,12 @@ docker-compose down -v
 
 # Restart fresh
 docker-compose up -d
+```
+
+Windows one-command reset + startup:
+
+```powershell
+.\scripts\start-reset.ps1
 ```
 
 ## Project Structure

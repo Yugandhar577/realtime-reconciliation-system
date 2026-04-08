@@ -31,6 +31,10 @@ ENV VITE_WS_URL=${VITE_WS_URL}
 # Build the application
 RUN npm run build
 
+# If a main logo exists in the built output, also copy it to favicon.ico so nginx serves
+# an up-to-date favicon at /favicon.ico (browsers often request that path).
+RUN if [ -f dist/Main_Logo.png ]; then cp dist/Main_Logo.png dist/favicon.ico || true; fi
+
 # Production image with nginx
 FROM nginx:alpine AS runner
 
