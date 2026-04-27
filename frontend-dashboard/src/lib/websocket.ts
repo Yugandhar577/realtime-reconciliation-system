@@ -38,6 +38,30 @@ class WebSocketService {
 
   constructor(private url?: string) { }
 
+  private resolveWebSocketUrl(): string {
+    if (!this.url) {
+      return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+    }
+
+    // Keep explicit WS(S) URLs untouched.
+    if (this.url.startsWith('ws://') || this.url.startsWith('wss://')) {
+      return this.url;
+    }
+
+    // Convert HTTP(S) endpoints to WS(S).
+    if (this.url.startsWith('http://') || this.url.startsWith('https://')) {
+      return this.url.replace(/^http/, 'ws');
+    }
+
+    // Support relative websocket paths such as "/ws" from env vars.
+    if (this.url.startsWith('/')) {
+      return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${this.url}`;
+    }
+
+    // Fallback for host:port style values.
+    return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${this.url}`;
+  }
+
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.ws?.readyState === WebSocket.OPEN) {
@@ -46,8 +70,7 @@ class WebSocketService {
       }
 
       try {
-        // Use provided URL or construct from current location
-        const wsUrl = this.url || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+        const wsUrl = this.resolveWebSocketUrl();
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {

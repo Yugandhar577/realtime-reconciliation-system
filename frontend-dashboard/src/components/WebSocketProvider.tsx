@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { websocketService } from '@/lib/websocket';
 import { useToast } from '@/hooks/use-toast';
 
@@ -23,6 +23,8 @@ interface WebSocketProviderProps {
 
 export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const { toast } = useToast();
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState<string>('disconnected');
 
   useEffect(() => {
     // Connect to WebSocket on app startup (non-blocking)
@@ -41,8 +43,17 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     connectWebSocket();
 
+    const syncConnectionState = () => {
+      setIsConnected(websocketService.isConnected);
+      setConnectionState(websocketService.connectionState);
+    };
+
+    const interval = setInterval(syncConnectionState, 500);
+    syncConnectionState();
+
     // Cleanup on unmount
     return () => {
+      clearInterval(interval);
       try {
         websocketService.disconnect();
       } catch (error) {
@@ -52,8 +63,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   }, [toast]);
 
   const contextValue: WebSocketContextType = {
-    isConnected: websocketService.isConnected,
-    connectionState: websocketService.connectionState,
+    isConnected,
+    connectionState,
   };
 
   return (

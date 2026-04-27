@@ -1,4 +1,4 @@
-# Documentation
+`# Documentation
 
 Comprehensive documentation for the Realtime Reconciliation System covering architecture, implementation details, and operational procedures.
 

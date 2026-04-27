@@ -64,7 +64,6 @@ class ApiService {
       const data = await response.json();
       console.log('API response data:', data);
       return data;
-      return data;
     } catch (error) {
       console.error('API request error:', error);
       // Return empty array for list endpoints, empty object for single items
