@@ -1,11 +1,17 @@
 // In-memory reconciliation state store
 
+// TTL for deduplication tracking: 2 hours
+const PROCESSED_EVENT_TTL_MS = 2 * 60 * 60 * 1000;
+// Max entries before a forced eviction sweep
+const PROCESSED_EVENT_MAX = 50_000;
+
 class StateStore {
   constructor() {
     this.store = new Map();
-    this.processedEventIds = new Set();
+    // Map<eventId, insertedAtMs> — bounded and TTL-evicted to prevent unbounded growth
+    this.processedEventIds = new Map();
     this.completedTransactions = [];
-    this.maxCompletedTransactions = 1000; // Keep last 1000 completed transactions
+    this.maxCompletedTransactions = 1000;
   }
 
   get(txId) {
@@ -61,11 +67,25 @@ class StateStore {
   }
 
   isEventProcessed(eventId) {
-    return this.processedEventIds.has(eventId);
+    const insertedAt = this.processedEventIds.get(eventId);
+    if (insertedAt === undefined) return false;
+    // Treat expired entries as unprocessed (evict lazily)
+    if (Date.now() - insertedAt > PROCESSED_EVENT_TTL_MS) {
+      this.processedEventIds.delete(eventId);
+      return false;
+    }
+    return true;
   }
 
   markEventProcessed(eventId) {
-    this.processedEventIds.add(eventId);
+    this.processedEventIds.set(eventId, Date.now());
+    // Periodic eviction: if we hit the cap, sweep out all expired entries
+    if (this.processedEventIds.size > PROCESSED_EVENT_MAX) {
+      const cutoff = Date.now() - PROCESSED_EVENT_TTL_MS;
+      for (const [id, ts] of this.processedEventIds) {
+        if (ts < cutoff) this.processedEventIds.delete(id);
+      }
+    }
   }
 
   getDerivedState(txId) {
@@ -82,13 +102,12 @@ class StateStore {
   }
 
   // API helper methods
-  getRecentTransactions(limit = 50) {
-    return this.completedTransactions
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, limit);
-  }
-
   getTransaction(txId) {
+    // Check completed transactions first (most common lookup from the detail page)
+    const completed = this.completedTransactions.find(tx => tx.transactionId === txId);
+    if (completed) return completed;
+
+    // Fall back to in-flight pending entry
     const entry = this.get(txId);
     if (!entry) return null;
 
@@ -109,67 +128,60 @@ class StateStore {
   }
 
   getMetrics() {
-    let total = 0;
     let matched = 0;
     let mismatched = 0;
     let missing = 0;
+    let latencySum = 0;
+    let latencyCount = 0;
 
-    for (const entry of this.store.values()) {
-      total++;
-      const status = this.getStatus(entry);
+    for (const tx of this.completedTransactions) {
+      const status = tx.status || tx.classification || '';
       if (status === 'MATCHED') matched++;
       else if (status === 'MISMATCHED') mismatched++;
       else if (status.includes('MISSING')) missing++;
+
+      if (tx.timeDeltaMs != null && !isNaN(tx.timeDeltaMs)) {
+        latencySum += tx.timeDeltaMs;
+        latencyCount++;
+      }
     }
+
+    const total = matched + mismatched + missing;
+    const mismatchRate = total > 0 ? (mismatched + missing) / total : 0;
 
     return {
       totalTransactions: total,
       matchedTransactions: matched,
       mismatchedTransactions: mismatched,
       missingTransactions: missing,
-      averageLatency: 0, // TODO: calculate
-      systemHealth: total > 0 ? 'healthy' : 'warning'
+      averageLatency: latencyCount > 0 ? Math.round(latencySum / latencyCount) : 0,
+      systemHealth: mismatchRate > 0.1 ? 'critical' : mismatchRate > 0.02 ? 'warning' : 'healthy'
     };
   }
 
   searchTransactions({ status, severity, startDate, endDate, limit = 50 }) {
-    let results = Array.from(this.store.values());
+    // Search completed transactions (the main dataset)
+    let results = [...this.completedTransactions];
 
     if (status) {
-      results = results.filter(entry => this.getStatus(entry) === status);
+      results = results.filter(tx => (tx.status || tx.classification) === status);
     }
 
     if (severity) {
-      results = results.filter(entry => this.getSeverity(entry) === severity);
+      results = results.filter(tx => tx.severity === severity);
     }
 
     if (startDate) {
       const start = new Date(startDate).getTime();
-      results = results.filter(entry => entry.firstSeenAt >= start);
+      results = results.filter(tx => tx.createdAt && Date.parse(tx.createdAt) >= start);
     }
 
     if (endDate) {
       const end = new Date(endDate).getTime();
-      results = results.filter(entry => entry.firstSeenAt <= end);
+      results = results.filter(tx => tx.createdAt && Date.parse(tx.createdAt) <= end);
     }
 
-    return results
-      .sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt)
-      .slice(0, limit)
-      .map(entry => ({
-        transactionId: entry.transactionId || 'unknown',
-        status: this.getStatus(entry),
-        severity: this.getSeverity(entry),
-        summary: this.getSummary(entry),
-        createdAt: new Date(entry.firstSeenAt).toISOString(),
-        anomalies: entry.anomalies || [],
-        timeline: {
-          firstSeenAt: new Date(entry.firstSeenAt).toISOString(),
-          lastUpdatedAt: new Date(entry.lastUpdatedAt).toISOString(),
-          processedAt: entry.cbsEvent?.processedAt,
-          receivedAt: entry.gatewayEvent?.processedAt
-        }
-      }));
+    return results.slice(0, limit);
   }
 
   getStats() {
@@ -221,7 +233,6 @@ class StateStore {
   }
 
   getRecentTransactions(limit = 50) {
-    console.log('getRecentTransactions called, completedTransactions length:', this.completedTransactions.length);
     return this.completedTransactions.slice(0, limit);
   }
 

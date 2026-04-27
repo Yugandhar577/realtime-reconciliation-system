@@ -14,6 +14,14 @@ export interface TransactionSummary {
     firstSeenAt: string;
     lastUpdatedAt: string;
   };
+  // Financial fields computed by the reconciliation engine
+  amountCBS?: number | null;
+  amountGateway?: number | null;
+  currency?: string | null;
+  cbsStatus?: string | null;
+  gatewayStatus?: string | null;
+  timeDeltaMs?: number | null;
+  recommendedAction?: string;
 }
 
 export interface SystemMetrics {
@@ -44,8 +52,6 @@ class ApiService {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
-      console.log('API request to:', url);
-
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
@@ -54,19 +60,13 @@ class ApiService {
         ...options,
       });
 
-      console.log('API response status:', response.status);
-
       if (!response.ok) {
-        console.error(`API request failed: ${response.status} ${response.statusText}`);
         throw new Error(`API request failed: ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log('API response data:', data);
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error('API request error:', error);
-      // Return empty array for list endpoints, empty object for single items
+      console.error(`API error [${endpoint}]:`, error);
       if (endpoint.includes('/recent') || endpoint.includes('/search')) {
         return [] as T;
       }

@@ -3,6 +3,8 @@ export interface ReconciliationEvent {
   type: 'reconciliation-event';
   transactionId: string;
   classification: 'MATCHED' | 'MISMATCHED' | 'MISSING_CBS' | 'MISSING_GATEWAY';
+  // backend also sets `status` as an alias for classification
+  status?: 'MATCHED' | 'MISMATCHED' | 'MISSING_CBS' | 'MISSING_GATEWAY';
   severity: 'LOW' | 'MEDIUM' | 'HIGH';
   summary: string;
   cbsEventId?: string;
@@ -17,6 +19,13 @@ export interface ReconciliationEvent {
   createdAt: string;
   anomalies: string[];
   recommendedAction: string;
+  // Financial fields computed by the reconciliation engine
+  amountCBS?: number | null;
+  amountGateway?: number | null;
+  currency?: string | null;
+  cbsStatus?: string | null;
+  gatewayStatus?: string | null;
+  timeDeltaMs?: number | null;
 }
 
 export interface StatsEvent {

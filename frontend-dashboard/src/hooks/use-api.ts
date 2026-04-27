@@ -1,18 +1,13 @@
 import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiService, TransactionSummary, SystemMetrics } from '@/lib/api';
+import { apiService } from '@/lib/api';
 
 export function useRecentTransactions(limit: number = 50) {
   return useQuery({
     queryKey: ['transactions', 'recent', limit],
-    queryFn: async () => {
-      console.log(`Fetching recent transactions with limit ${limit}...`);
-      const result = await apiService.getRecentTransactions(limit);
-      console.log('Recent transactions result:', result);
-      return result;
-    },
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 10000, // Consider data stale after 10 seconds
+    queryFn: () => apiService.getRecentTransactions(limit),
+    refetchInterval: 30000,
+    staleTime: 10000,
   });
 }
 
@@ -35,13 +30,8 @@ export function useSystemMetrics() {
 export function useTransactionStats() {
   return useQuery({
     queryKey: ['transactions', 'stats'],
-    queryFn: async () => {
-      console.log('Fetching transaction stats...');
-      const result = await apiService.getTransactionStats();
-      console.log('Transaction stats result:', result);
-      return result;
-    },
-    refetchInterval: 10000, // Refetch every 10 seconds
+    queryFn: () => apiService.getTransactionStats(),
+    refetchInterval: 10000,
   });
 }
 

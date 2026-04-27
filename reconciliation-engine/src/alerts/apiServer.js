@@ -15,14 +15,43 @@ class ApiServer {
     this.setupRoutes();
   }
 
+  // Serialize a completed/pending transaction to the API response shape,
+  // passing through all enriched fields the reconciler computes.
+  toSummary(tx) {
+    return {
+      id: tx.transactionId,
+      transactionId: tx.transactionId,
+      status: tx.status || tx.classification || 'UNKNOWN',
+      severity: tx.severity || 'LOW',
+      summary: tx.summary || `Transaction ${tx.transactionId}`,
+      createdAt: tx.createdAt || new Date().toISOString(),
+      anomalies: tx.anomalies || [],
+      timeline: tx.timeline || {
+        firstSeenAt: tx.firstSeenAt || new Date().toISOString(),
+        lastUpdatedAt: tx.lastUpdatedAt || new Date().toISOString()
+      },
+      amountCBS: tx.amountCBS ?? null,
+      amountGateway: tx.amountGateway ?? null,
+      currency: tx.currency ?? null,
+      cbsStatus: tx.cbsStatus ?? null,
+      gatewayStatus: tx.gatewayStatus ?? null,
+      timeDeltaMs: tx.timeDeltaMs ?? null,
+      recommendedAction: tx.recommendedAction || 'NONE',
+    };
+  }
+
   setupRoutes() {
     this.app.use(express.json());
 
-    // CORS middleware
+    // CORS — restrict to configured origin in production, allow all in development
+    const allowedOrigin = process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? null : '*');
     this.app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      const origin = req.headers.origin;
+      if (allowedOrigin === '*' || origin === allowedOrigin) {
+        res.header('Access-Control-Allow-Origin', allowedOrigin === '*' ? '*' : origin);
+        res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Accept');
+      }
       if (req.method === 'OPTIONS') {
         res.sendStatus(200);
       } else {
@@ -44,22 +73,7 @@ class ApiServer {
       try {
         const limit = parseInt(req.query.limit) || 50;
         const transactions = this.stateStore.getRecentTransactions(limit);
-
-        const summaries = transactions.map(tx => ({
-          id: tx.transactionId,
-          transactionId: tx.transactionId,
-          status: tx.status,
-          severity: tx.severity || 'LOW',
-          summary: tx.summary || `Transaction ${tx.transactionId}`,
-          createdAt: tx.createdAt || new Date().toISOString(),
-          anomalies: tx.anomalies || [],
-          timeline: tx.timeline || {
-            firstSeenAt: tx.firstSeenAt || new Date().toISOString(),
-            lastUpdatedAt: tx.lastUpdatedAt || new Date().toISOString()
-          }
-        }));
-
-        res.json(summaries);
+        res.json(transactions.map(tx => this.toSummary(tx)));
       } catch (error) {
         console.error('Error getting recent transactions:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -85,23 +99,32 @@ class ApiServer {
       }
     });
     // Fault injection endpoints
+    const VALID_FAULT_TYPES = new Set(['GATEWAY_TIMEOUT', 'CBS_FAILURE', 'AMOUNT_MISMATCH', 'NONE']);
+    const VALID_TARGETS = new Set(['CBS', 'GATEWAY']);
+
     this.app.post('/api/faults/inject', (req, res) => {
       try {
-        const { type, target, duration = 30000 } = req.body; // duration in ms, default 30s
+        const { type, target, duration = 30000 } = req.body;
 
         if (!type || !target) {
           return res.status(400).json({ error: 'Missing type or target parameter' });
         }
+        if (!VALID_FAULT_TYPES.has(type.toUpperCase())) {
+          return res.status(400).json({ error: `Invalid fault type. Allowed: ${[...VALID_FAULT_TYPES].join(', ')}` });
+        }
+        if (!VALID_TARGETS.has(target.toUpperCase())) {
+          return res.status(400).json({ error: `Invalid target. Allowed: ${[...VALID_TARGETS].join(', ')}` });
+        }
+        const durationMs = Math.min(Math.max(parseInt(duration) || 30000, 1000), 300000); // clamp 1s–5min
 
-        // Store fault configuration (in a real system, this would be persisted)
         this.faultConfig = {
           type: type.toUpperCase(),
           target: target.toUpperCase(),
           enabled: true,
-          expiresAt: Date.now() + duration
+          expiresAt: Date.now() + durationMs
         };
 
-        console.log(`Fault injection activated: ${type} on ${target} for ${duration}ms`);
+        console.log(`Fault injection activated: ${type} on ${target} for ${durationMs}ms`);
 
         res.json({
           success: true,
@@ -182,17 +205,22 @@ class ApiServer {
 
     this.app.get('/api/analytics/latency', (req, res) => {
       try {
-        // Mock latency distribution for now - in a real system this would be measured
-        const latencyDistribution = [
-          { range: "0-25ms", count: Math.floor(Math.random() * 50) + 200 },
-          { range: "25-50ms", count: Math.floor(Math.random() * 50) + 150 },
-          { range: "50-100ms", count: Math.floor(Math.random() * 50) + 100 },
-          { range: "100-250ms", count: Math.floor(Math.random() * 50) + 50 },
-          { range: "250-500ms", count: Math.floor(Math.random() * 20) + 20 },
-          { range: "500ms+", count: Math.floor(Math.random() * 10) + 5 },
-        ];
+        const buckets = [
+          { range: '0-25ms',    min: 0,   max: 25   },
+          { range: '25-50ms',   min: 25,  max: 50   },
+          { range: '50-100ms',  min: 50,  max: 100  },
+          { range: '100-250ms', min: 100, max: 250  },
+          { range: '250-500ms', min: 250, max: 500  },
+          { range: '500ms+',    min: 500, max: Infinity },
+        ].map(b => ({ range: b.range, count: 0, min: b.min, max: b.max }));
 
-        res.json(latencyDistribution);
+        for (const tx of this.stateStore.completedTransactions) {
+          if (tx.timeDeltaMs == null || isNaN(tx.timeDeltaMs)) continue;
+          const bucket = buckets.find(b => tx.timeDeltaMs >= b.min && tx.timeDeltaMs < b.max);
+          if (bucket) bucket.count++;
+        }
+
+        res.json(buckets.map(({ range, count }) => ({ range, count })));
       } catch (error) {
         console.error('Error getting latency analytics:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -223,7 +251,9 @@ class ApiServer {
 
         const escape = (val) => {
           if (val === null || val === undefined) return '';
-          const s = String(val);
+          let s = String(val);
+          // Prefix formula-triggering characters to prevent CSV injection in Excel/Sheets
+          if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
           return '"' + s.replace(/"/g, '""') + '"';
         };
 
@@ -270,22 +300,7 @@ class ApiServer {
         if (!transaction) {
           return res.status(404).json({ error: 'Transaction not found' });
         }
-
-        const summary = {
-          id: transaction.transactionId,
-          transactionId: transaction.transactionId,
-          status: transaction.status,
-          severity: transaction.severity || 'LOW',
-          summary: transaction.summary || `Transaction ${transaction.transactionId}`,
-          createdAt: transaction.createdAt || new Date().toISOString(),
-          anomalies: transaction.anomalies || [],
-          timeline: transaction.timeline || {
-            firstSeenAt: transaction.firstSeenAt || new Date().toISOString(),
-            lastUpdatedAt: transaction.lastUpdatedAt || new Date().toISOString()
-          }
-        };
-
-        res.json(summary);
+        res.json(this.toSummary(transaction));
       } catch (error) {
         console.error('Error getting transaction:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -325,19 +340,7 @@ class ApiServer {
           limit: parseInt(limit)
         });
 
-        const summaries = results.map(tx => ({
-          id: tx.transactionId,
-          transactionId: tx.transactionId,
-          status: tx.status,
-          severity: tx.severity || 'LOW',
-          summary: tx.summary || `Transaction ${tx.transactionId}`,
-          createdAt: tx.createdAt || new Date().toISOString(),
-          anomalies: tx.anomalies || [],
-          timeline: tx.timeline || {
-            firstSeenAt: tx.firstSeenAt || new Date().toISOString(),
-            lastUpdatedAt: tx.lastUpdatedAt || new Date().toISOString()
-          }
-        }));
+        const summaries = results.map(tx => this.toSummary(tx));
 
         res.json(summaries);
       } catch (error) {
